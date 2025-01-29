@@ -1,60 +1,41 @@
-use std::fmt;
+use std::rc::Rc;
 
-struct Input {
-    text: String,
-    position: usize,
-}
+type ParseResult<'a, A> = Result<(A, &'a str), String>;
+type ParseFn<'a, A> = Rc<dyn Fn(&'a str) -> ParseResult<'a, A> + 'a>;
 
-impl Input {
-    fn new(text: impl Into<String>) -> Self {
-        Input { text: text.into(), position: 0, }
-    }
-
-    fn sub(&self, start: usize, len: usize) -> Self {
-        let text = self.text.get(start..start + len).unwrap_or("").to_string();
-
-        Input { text, position: self.position + start, }
-    }
-}
-
-struct Error {
-    description: String,
-    position: usize,
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Failed at {}: {}", self.position, self.description)
-    }
-}
-
-struct Parser<'a, A> {
-    run: Box<dyn Fn(Input) -> (Input, Result<A, String>) + 'a>,
+pub struct Parser<'a, A> {
+    parse: ParseFn<'a, A>,
 }
 
 impl<'a, A> Parser<'a, A> {
     fn new<F>(f: F) -> Self
-    where
-        F: Fn(Input) -> (Input, Result<A, String>) + 'a
-    {
-        Parser { run: Box::new(f), }
-    } 
-
-    fn fail<E>(error: E) -> Self
     where 
-        E: Into<String> + Clone + 'a 
+        F: Fn(&'a str) -> ParseResult<'a, A> + 'a
     {
-        Parser::new(move |input: Input| {
-            (input, Err(error.clone().into()))
-        })
+        Parser {
+            parse: Rc::new(f),
+        }
     }
 
-    fn wrap(value: A) -> Self
-    where
-        A: Clone + 'a 
-    {
-        Parser::new(move |input: Input| {
-            (input, Ok(value.clone()))
-        })
+    pub fn run(&self, input: &'a str) -> ParseResult<'a, A> {
+        (self.parse)(input)
     }
+}
+
+pub fn char_parser<'a>(c: char) -> Parser<'a, char> {
+    Parser::new(move |input: &'a str| {
+        match input.chars().next() {
+            Some(first) if first == c => Ok((c, &input[c.len_utf8()..])),
+            _ => Err(format!("Expected '{}', but got something else", c)),
+        }
+    })
+}
+
+pub fn any_char<'a>() -> Parser<'a, char> {
+    Parser::new(move |input: &'a str| {
+        match input.chars().next() {
+            Some(first) => Ok((first, &input[first.len_utf8()..])),
+            None => Err(format!("Expected a character but got an end of a string")),
+        }
+    })
 }
