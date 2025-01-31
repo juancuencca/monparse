@@ -7,7 +7,7 @@ pub struct Parser<'a, A> {
     parse: ParseFn<'a, A>,
 }
 
-impl<'a, A> Parser<'a, A> {
+impl<'a, A: 'a> Parser<'a, A> {
     fn new<F>(f: F) -> Self
     where 
         F: Fn(&'a str) -> ParseResult<'a, A> + 'a
@@ -19,6 +19,15 @@ impl<'a, A> Parser<'a, A> {
 
     pub fn run(&self, input: &'a str) -> ParseResult<'a, A> {
         (self.parse)(input)
+    }
+
+    pub fn map<F, B: 'a>(self, f: F) -> Parser<'a, B> 
+    where
+        F: Fn(A) -> B + 'a 
+    {
+        Parser::new(move |input| {
+            self.run(input).map(|(a, slice)| (f(a), slice))
+        })
     }
 }
 
