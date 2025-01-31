@@ -29,6 +29,15 @@ impl<'a, A: 'a> Parser<'a, A> {
             self.run(input).map(|(a, slice)| (f(a), slice))
         })
     }
+
+    pub fn flat_map<F, B: 'a>(self, f: F) -> Parser<'a, B> 
+    where
+        F: Fn(A) -> Parser<'a, B> + 'a 
+    {
+        Parser::new(move |input| {
+            self.run(input).and_then(|(a, slice)| f(a).run(slice))
+        })
+    }
 }
 
 pub fn char_parser<'a>(c: char) -> Parser<'a, char> {
